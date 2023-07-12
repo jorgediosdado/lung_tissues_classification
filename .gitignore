@@ -1,0 +1,9 @@
+private_combined/
+private_combined_test_set/
+dataset_2_categories/
+mlruns/
+
+old_models/
+
+historias.xlsx
+*.rar
