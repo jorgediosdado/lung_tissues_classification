@@ -1,7 +1,11 @@
-private_combined/
-private_combined_test_set/
-dataset_2_categories/
+dataset_2/
+dataset_2_test_set/
+
+dataset_1/
+dataset_1_test_set/
+
 mlruns/
+
 
 old_models/
 
