@@ -1,8 +1,9 @@
+dataset_2_final/
+con problemas/
 dataset_2/
 dataset_2_test_set/
+julio/
 
-dataset_1/
-dataset_1_test_set/
 
 mlruns/
 
@@ -11,3 +12,6 @@ old_models/
 
 historias.xlsx
 *.rar
+*.csv
+*.xlsx
+*.docx
