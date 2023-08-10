@@ -1,14 +1,15 @@
+crop_dataset_2/
+crop_dataset_test/
+
 dataset_2_final/
-con problemas/
-dataset_2/
-dataset_2_test_set/
-julio/
 
 
+prueba_crop/
 mlruns/
 
 
 old_models/
+
 
 historias.xlsx
 *.rar
