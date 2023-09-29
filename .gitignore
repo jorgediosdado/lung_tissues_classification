@@ -19,3 +19,10 @@ historias.xlsx
 *.csv
 *.xlsx
 *.docx
+
+data
+logs/
+*-checkpoint.ipynb
+*.swp
+nohup*
+
