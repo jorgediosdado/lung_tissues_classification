@@ -9,6 +9,8 @@ from tqdm.notebook import tqdm
 import matplotlib.pyplot as plt
 from PIL import Image
 
+from IPython.display import display_markdown
+
 import tensorflow as tf
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.applications import ResNet50, EfficientNetB0
@@ -297,7 +299,8 @@ def train_evaluate(num_classes, resolution,
                    test_directory = "data/validation_final_septiembre/"):
     
     resname = resolution if resolution is not None else 'all'
-    print(f'Evaluating {resname} resolution, {num_classes} classes')
+    # print(f'Evaluating {resname} resolution, {num_classes} classes')
+    display_markdown(f'## Evaluating {resname} resolution, {num_classes} classes', raw=True)
     
     image_paths = get_files(root_directory, resolution=resolution)
     class_names, class2int, labels = get_classes_labels(root_directory, image_paths, num_classes)

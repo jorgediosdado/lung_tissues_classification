@@ -25,6 +25,7 @@ historias.xlsx
 data
 logs/
 *-checkpoint.ipynb
+*-checkpoint.py
 *.swp
 nohup*
 
