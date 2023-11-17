@@ -29,3 +29,4 @@ logs/
 *.swp
 nohup*
 
+**/*.cpython-39..pyc

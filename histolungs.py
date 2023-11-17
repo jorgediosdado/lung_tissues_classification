@@ -1,5 +1,4 @@
 import os
-import os
 import random
 import imageio
 import glob
@@ -30,8 +29,27 @@ from keras.models import Model
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, precision_score, recall_score, accuracy_score
 
+import io
+import cv2
+def resize_img_aspect(image, new_height=512):
+    height, width, _ = image.shape
+    ratio = width / height
+
+    new_width = int(ratio * new_height)
+
+    image = cv2.resize(image, (new_width, new_height))
+    return image
+    
+def fig_to_img(fig):
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', bbox_inches='tight')
+    buf.seek(0)
+    image = tf.image.decode_png(buf.getvalue(), channels=3).numpy()    
+    return image
+
 # Function to get paths from private directory
-def get_files(base_dir, resolution=None):
+def get_files(base_dir, resolution=None, exclude_pd=False):
+    resolution = resolution if resolution != 'public' else None
     ext = ['jpg', 'jpeg']
     ret_files = []
 
@@ -40,18 +58,22 @@ def get_files(base_dir, resolution=None):
             continue
         if (resolution is not None) and (f'_{resolution}' not in f):
             continue
+        if (exclude_pd) and ('_pd' in f):
+            continue
         ret_files.append(f)
         
     return ret_files
 
-def get_classes_labels(root_directory, image_paths, num_classes):
-    if num_classes == 7:
+def get_classes_labels(root_directory, image_paths, class_type, exclude_pd=False):
+    if class_type == 'micro':
         class_names = sorted([f for f in os.listdir(root_directory) if not f.startswith('.')])
     else:
         class_names = sorted(list(set([f if '_' not in f else f.split('_')[0] for f in os.listdir(root_directory) if not f.startswith('.')])))
+        
+    class_names = class_names if not exclude_pd else [c for c in class_names if '_pd' not in c]
 
     class2int = dict(zip(class_names, range(len(class_names))))
-    labels = list(map(lambda im: class2int[im.split(root_directory)[1].split('/')[0]] if num_classes==7 else class2int[im.split(root_directory)[1].split('/')[0].split('_')[0]], image_paths))
+    labels = list(map(lambda im: class2int[im.split(root_directory)[1].split('/')[0]] if class_type=='micro' else class2int[im.split(root_directory)[1].split('/')[0].split('_')[0]], image_paths))
     
     return class_names, class2int, labels
     
@@ -91,14 +113,12 @@ class CustomDataGenerator(Sequence):
         
         # Read images
         images = np.array([imageio.v2.imread(im) for im in images])
+        images = images/255
         
         if self.mode == 'train':
             # Choose one of the four quadrants
             x, y = np.random.choice([0,1], size=2)
             images = images[:,(x*600):(x*600 + 600), (y*800):(y*800 + 800)]
-
-            #Todos los modelos tienen capa de rescaling por lo que no es necesaria aqui
-            # images = images/255
 
             images = np.array([self.random_crop(im) for im in images])
             labels = to_categorical(labels, num_classes=self.num_classes)
@@ -111,17 +131,23 @@ class CustomDataGenerator(Sequence):
                 new_images.append(images[:,(x*600):(x*600 + 600), (y*800):(y*800 + 800)])
                 new_labels.append(to_categorical(labels, num_classes=self.num_classes))
 
-        s = len(new_images[0])
-        # indexes = list(range(0,len(images)*4,4))+list(range(1,len(images)*4,4))+list(range(2,len(images)*4,4))+list(range(3,len(images)*4,4))
-        indexes = [i for j in range(4) for i in range(j, len(images) * 4, 4)]
+        #indexes = [i for j in range(4) for i in range(j, len(images) * 4, 4)]
+        indexes = list(range(0,len(images)*4,2)) + list(range(1,len(images)*4,2))
+        #print(indexes)
         new_images = np.concatenate(new_images)[indexes]
         new_labels = np.concatenate(new_labels)[indexes]
-                
-        new_images = CenterCrop(self.image_size, self.image_size)(new_images).numpy().astype(int)
+        
+        # from ZGlobalLib.visualization import plot_frames
+        # plot_frames(images)
+        
+        new_images = tf.image.resize(new_images, (300, 400)).numpy()
+        new_images = CenterCrop(self.image_size, self.image_size)(new_images).numpy()
+        
         return new_images, new_labels
             
     
     def random_crop(self, image):
+        image = tf.image.resize(image, (300, 400)).numpy()
         cropped_image = tf.image.random_crop(image, size=[self.image_size, self.image_size, 3]).numpy()
         return cropped_image
     
@@ -135,15 +161,71 @@ class CustomDataGenerator(Sequence):
             axs[i].axis('off')
             axs[i].set_title(g0[1][i])
             
+
+class PublicDataGenerator(Sequence):
+    def __init__(self, images, labels, num_classes, batch_size=8, image_size=255, 
+                 shuffle_epoch=True, mode='train'):
+                
+        self.num_classes = num_classes
+        self.images = images
+        self.labels = labels
+        self.batch_size = batch_size*4
+        self.image_size = image_size
+        self.shuffle_epoch = shuffle_epoch
+        
+    def __len__(self):
+        return int(np.ceil(len(self.images) / self.batch_size))
+    
+    def __getitem__(self, idx):
+        
+        if (idx == 0) and (self.shuffle_epoch):            
+            # Shuffle at first batch
+            c = list(zip(self.images, self.labels))
+            random.shuffle(c)
+            self.images, self.labels = zip(*c)
+            self.images, self.labels = np.array(self.images), np.array(self.labels)       
+            
+        bs = self.batch_size
+        images = self.images[idx * bs : (idx+1) * bs]
+        labels = self.labels[idx * bs : (idx+1) * bs]
+        
+        # Read images
+        images = np.array([imageio.v2.imread(im) for im in images])
+        images = images/255
+        
+        images = np.array([self.random_crop(im) for im in images])
+        labels = to_categorical(labels, num_classes=self.num_classes)
+
+        return images, labels
+            
+    
+    def random_crop(self, image):
+        # cropped_image = tf.image.random_crop(image, size=[self.image_size, self.image_size, 3]).numpy()
+        cropped_image = tf.image.resize(image, (256, 256)).numpy()
+        return cropped_image
     
     
-def get_generators(image_paths, labels, num_classes, test_size=0.15, batch_size=32, random_state=42):
+    def show_generator(self, N=12):        
+        g0 = self[0]
+        N = min(N, len(g0[0]))
+        fig, axs = plt.subplots(1,N, figsize=(20,4))
+        for i in range(N):
+            axs[i].imshow(g0[0][i])
+            axs[i].axis('off')
+            axs[i].set_title(g0[1][i])
+    
+    
+def get_generators(image_paths, labels, num_classes, resolution, test_size=0.15, batch_size=8, random_state=42):
     #Split in training and validation
     train_paths, val_paths, train_labels, val_labels = train_test_split(image_paths, labels, test_size=test_size, random_state=42)
-
+ 
     #Build the generators
-    train_generator = CustomDataGenerator(train_paths, train_labels, num_classes=num_classes, batch_size=batch_size)
-    val_generator = CustomDataGenerator(val_paths, val_labels, num_classes=num_classes, shuffle_epoch=False, mode='val', batch_size=batch_size)
+    if resolution == 'public':
+        train_generator = PublicDataGenerator(train_paths, train_labels, num_classes=num_classes, batch_size=batch_size)
+        val_generator = PublicDataGenerator(val_paths, val_labels, num_classes=num_classes, shuffle_epoch=False, batch_size=batch_size)
+    else:        
+        train_generator = CustomDataGenerator(train_paths, train_labels, num_classes=num_classes, batch_size=batch_size)
+        val_generator = CustomDataGenerator(val_paths, val_labels, num_classes=num_classes, shuffle_epoch=False, mode='val', batch_size=batch_size)
     
     return train_generator, val_generator
 
@@ -156,9 +238,34 @@ def compute_weights(train_generator):
     class_weights = dict(enumerate(class_weights))
     return class_weights
 
+
+
+def simple_model(num_classes, resolution):
+    entradas = layers.Input((255, 255, 3))
+
+    # Two convolutional layers with 16 filters each
+    x = layers.Conv2D(16, (3, 3), activation='relu', padding='same')(entradas)
+    x = layers.Conv2D(16, (3, 3), activation='relu', padding='same')(x)
+    x = layers.Conv2D(16, (3, 3), activation='relu', padding='same')(x)
+
+    x = layers.GlobalAveragePooling2D()(x)
+
+    # Dense layer with 1280 units
+    x = layers.Dense(32, activation='relu')(x)
+
+    # Output layer
+    output_tensor = layers.Dense(num_classes, activation='softmax')(x)
+
+    model = Model(inputs=entradas, outputs=output_tensor)
+    return model
+
     
-def get_model(num_classes):
-    base_model = EfficientNetB0(include_top = False ,weights='imagenet', pooling='avg')
+def get_model(num_classes, resolution):
+    
+    #return simple_model(num_classes, resolution)
+    
+    base_model = EfficientNetB0(include_top = False, weights='imagenet', pooling='avg')
+    # base_model = EfficientNetB0(include_top = False, weights=None, pooling='avg')
 
     # Introduce a layer of data augmentation
     data_augmentation = Sequential([
@@ -166,14 +273,14 @@ def get_model(num_classes):
         preprocessing.RandomFlip("horizontal"),
         preprocessing.RandomFlip("vertical"),
         preprocessing.RandomZoom(0.2),
-        preprocessing.RandomContrast(0.2),
         preprocessing.RandomTranslation(0.2, 0.2),
         preprocessing.RandomHeight(0.2),
         preprocessing.RandomWidth(0.2),    
         preprocessing.RandomContrast(0.2),
 
-    ])
+    ]) if resolution != 'public' else Sequential([])
 
+    data_augmentation = Sequential([])
     # # Freeze all layers in the base model
     # for layer in base_model.layers:
     #     layer.trainable = False
@@ -201,8 +308,10 @@ def train_model(model, train_generator, val_generator, num_classes, class_weight
     num_epochs = 200
     patience = 40
     patience_lr = 20
+    
+    init_lr = 1e-4
 
-    model.compile(optimizer=tf.keras.optimizers.Adam(), 
+    model.compile(optimizer=tf.keras.optimizers.Adam(init_lr), 
                   loss='categorical_crossentropy', 
                   metrics=[
                         tf.keras.metrics.CategoricalAccuracy(name=f'metrics/accuracy'),
@@ -234,47 +343,56 @@ def train_model(model, train_generator, val_generator, num_classes, class_weight
     return history
 
 #function to plot the metrics of the trainign and validation
-def plot_metrics(history):
+def plot_metrics(history, log_dir):
     # Plotting training accuracy
-    plt.figure(figsize=(10,5))
-    plt.subplot(1, 2, 1)
-    plt.plot(history.history['metrics/accuracy'], label='Train')
-    plt.plot(history.history['val_metrics/accuracy'], label='Validation')
-    plt.title('Training and Validation Accuracy')
-    plt.xlabel('Epoch')
-    plt.ylabel('Accuracy')
-    plt.legend()
+    fig, axs = plt.subplots(1, 2, figsize=(10,5))
+    axs[0].plot(history.history['metrics/accuracy'], label='Train')
+    axs[0].plot(history.history['val_metrics/accuracy'], label='Validation')
+    axs[0].set_title('Training and Validation Accuracy')
+    axs[0].set_xlabel('Epoch')
+    axs[0].set_ylabel('Accuracy')
+    axs[0].legend()
 
     # Plotting training loss
-    plt.subplot(1, 2, 2)
-    plt.plot(history.history['loss'], label='Train')
-    plt.plot(history.history['val_loss'], label='Validation')
-    plt.title('Training and Validation Loss')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.legend()
+    axs[1].plot(history.history['loss'], label='Train')
+    axs[1].plot(history.history['val_loss'], label='Validation')
+    axs[1].set_title('Training and Validation Loss')
+    axs[1].set_xlabel('Epoch')
+    axs[1].set_ylabel('Loss')
+    axs[1].legend()
 
     plt.tight_layout()
+    
+    image = fig_to_img(fig)
+    image = resize_img_aspect(image, 512)
+    plt.imsave(os.path.join(log_dir, 'plot.png'), image)
+    
     plt.show()
     
     
-def test_model(model, class2int, resolution, test_directory = "data/validation_final_septiembre/"):
-
-    test_image_paths = get_files(test_directory, resolution=resolution)
+    
+def get_test_generator(class2int, resolution, log_dir, test_directory = "data/validation_final_septiembre/", exclude_pd=False):
+    test_image_paths = get_files(test_directory, resolution=resolution, exclude_pd=exclude_pd)    
     num_classes = len(class2int)
     class_names = sorted(class2int.keys())
-    test_labels = list(map(lambda im: class2int[im.split(test_directory)[1].split('/')[0]] if num_classes==7 else class2int[im.split(test_directory)[1].split('/')[0].split('_')[0]], test_image_paths))
+    test_labels = list(map(lambda im: class2int[im.split(test_directory)[1].split('/')[0]] if num_classes in [5, 7] else class2int[im.split(test_directory)[1].split('/')[0].split('_')[0]], test_image_paths))
 
     # Test labels are repeated 4 times since each image is divided in 4 patches
-    test_labels = np.repeat(np.expand_dims(test_labels,0), 4, 0).T.flatten()
+    # test_labels = np.repeat(np.expand_dims(test_labels,0), 4, 0).T.flatten()
     # Extract image paths and labels
 
     test_generator = CustomDataGenerator(test_image_paths, test_labels, num_classes, shuffle_epoch=False, mode='val', batch_size=8)
+    
+    return test_generator
+    
+def test_model(model, test_generator, log_dir, class_names):
+
     test_predictions = model.predict(test_generator)
+    test_labels = np.concatenate([np.argmax(t[1], 1) for t in test_generator])
 
     # Convert predictions to class labels
     predicted_labels = np.argmax(test_predictions, axis=1)
-
+    
     # Calculate metrics
     accuracy = accuracy_score(test_labels, predicted_labels)
     precision = precision_score(test_labels, predicted_labels, average='macro')
@@ -290,30 +408,51 @@ def test_model(model, class2int, resolution, test_directory = "data/validation_f
     labels = np.unique(np.concatenate((test_labels, predicted_labels)))
 
     # Visualize the confusion matrix
-    ax = plt.figure(figsize=(5,5)).gca()
+    fig = plt.figure(figsize=(5,5))
+    ax = fig.gca()
     ConfusionMatrixDisplay.from_predictions(test_labels, predicted_labels, display_labels=class_names, normalize='true', ax=ax)
+    
+    ax.set_title(f'Acc: {accuracy:4.2f}')
+    image = fig_to_img(fig)
+    image = resize_img_aspect(image, 512)
+    plt.imsave(os.path.join(log_dir, 'confusion.png'), image)
+    
     plt.show()
 
-def train_evaluate(num_classes, resolution, 
-                   root_directory = "data/dataset_2_final/", 
-                   test_directory = "data/validation_final_septiembre/"):
+# def train_evaluate(class_type, resolution,
+#                    public_directory = 'data/public_dataset/',
+#                    root_directory = "data/dataset_2_final/", 
+#                    test_directory = "data/validation_final_septiembre/",
+#                    pretrain_dir = None,
+#                    exclude_pd = False
+#                   ):
     
-    resname = resolution if resolution is not None else 'all'
-    # print(f'Evaluating {resname} resolution, {num_classes} classes')
-    display_markdown(f'## Evaluating {resname} resolution, {num_classes} classes', raw=True)
+#     if resolution == 'public':
+#         root_directory = public_directory
     
-    image_paths = get_files(root_directory, resolution=resolution)
-    class_names, class2int, labels = get_classes_labels(root_directory, image_paths, num_classes)
-    train_generator, val_generator = get_generators(image_paths, labels, num_classes=num_classes)
-    class_weights = compute_weights(train_generator)
+#     resname = resolution if resolution is not None else 'all'
+    
+#     image_paths = get_files(root_directory, resolution=resolution, exclude_pd=exclude_pd)
+#     class_names, class2int, labels = get_classes_labels(root_directory, image_paths, class_type, exclude_pd=exclude_pd)
+    
+#     num_classes = len(class2int)
+    
+#     display_markdown(f'## Evaluating {resname} resolution, {num_classes} classes, exc pd {exclude_pd}', raw=True)
+    
+#     train_generator, val_generator = get_generators(image_paths, labels, num_classes=num_classes, resolution=resolution)
+#     class_weights = compute_weights(train_generator)
 
-    model = get_model(num_classes)
+#     model = get_model(num_classes, resolution=resolution)
     
-    MODEL_NAME = f'Ef0_{resname}_{num_classes}_classes'
-    RUN_NAME = ''
-    log_dir = f'logs/{datetime.datetime.now().strftime("%Y%m%d-%H%M%S")}/{MODEL_NAME}{RUN_NAME}'
+#     if pretrain_dir is not None:
+#         model.load_weights(pretrain_dir)
     
-    history = train_model(model, train_generator, val_generator, num_classes, class_weights, log_dir)
+#     MODEL_NAME = f'Ef0_{resname}_{num_classes}_classes_excpd{int(exclude_pd)}'
+#     RUN_NAME = ''
+#     log_dir = f'logs/{datetime.datetime.now().strftime("%Y%m%d-%H%M%S")}/{MODEL_NAME}{RUN_NAME}'
+#     print(log_dir)
     
-    plot_metrics(history)
-    test_model(model, class2int, resolution)
+#     history = train_model(model, train_generator, val_generator, num_classes, class_weights, log_dir)
+    
+#     plot_metrics(history, log_dir)
+#     test_model(model, class2int, resolution, log_dir, exclude_pd=exclude_pd)
