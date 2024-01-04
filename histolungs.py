@@ -79,7 +79,7 @@ def get_classes_labels(root_directory, image_paths, class_type, exclude_pd=False
     
 
 class CustomDataGenerator(Sequence):
-    def __init__(self, images, labels, num_classes, batch_size=8, image_size=255, 
+    def __init__(self, images, labels, num_classes, batch_size=8, image_size=256, 
                  shuffle_epoch=True, mode='train'):
         
         assert mode in ['train', 'val']
@@ -118,38 +118,38 @@ class CustomDataGenerator(Sequence):
         if self.mode == 'train':
             # Choose one of the four quadrants
             x, y = np.random.choice([0,1], size=2)
-            images = images[:,(x*600):(x*600 + 600), (y*800):(y*800 + 800)]
+            #images = images[:,(x*600):(x*600 + 600), (y*800):(y*800 + 800)]
 
             images = np.array([self.random_crop(im) for im in images])
             labels = to_categorical(labels, num_classes=self.num_classes)
 
             return images, labels
         
-        new_images, new_labels = [], []
-        for x in range(2):
-            for y in range(2):
-                new_images.append(images[:,(x*600):(x*600 + 600), (y*800):(y*800 + 800)])
-                new_labels.append(to_categorical(labels, num_classes=self.num_classes))
+        # new_images, new_labels = [], []
+        # for x in range(2):
+        #     for y in range(2):
+        #         new_images.append(images[:,(x*600):(x*600 + 600), (y*800):(y*800 + 800)])
+        #         new_labels.append(to_categorical(labels, num_classes=self.num_classes))
 
-        #indexes = [i for j in range(4) for i in range(j, len(images) * 4, 4)]
-        indexes = list(range(0,len(images)*4,2)) + list(range(1,len(images)*4,2))
-        #print(indexes)
-        new_images = np.concatenate(new_images)[indexes]
-        new_labels = np.concatenate(new_labels)[indexes]
+        new_images, new_labels = images, to_categorical(labels, num_classes=self.num_classes)
+        # indexes = [i for j in range(4) for i in range(j, len(images) * 4, 4)]
+        # indexes = list(range(0,len(images)*4,2)) + list(range(1,len(images)*4,2))
+        # print(indexes)
+        # new_images = np.concatenate(new_images)[indexes]
+        # new_labels = np.concatenate(new_labels)[indexes]
         
         # from ZGlobalLib.visualization import plot_frames
         # plot_frames(images)
         
-        new_images = tf.image.resize(new_images, (300, 400)).numpy()
-        new_images = CenterCrop(self.image_size, self.image_size)(new_images).numpy()
-        
+        new_images = tf.image.resize(new_images, (360, 540)).numpy()
+        #new_images = CenterCrop(self.image_size, self.image_size)(new_images).numpy()
         return new_images, new_labels
             
     
     def random_crop(self, image):
-        image = tf.image.resize(image, (300, 400)).numpy()
-        cropped_image = tf.image.random_crop(image, size=[self.image_size, self.image_size, 3]).numpy()
-        return cropped_image
+        image = tf.image.resize(image, (360, 540)).numpy()
+        #cropped_image = tf.image.random_crop(image, size=[self.image_size, self.image_size, 3]).numpy()
+        return image
     
     
     def show_generator(self, N=12):        
@@ -163,7 +163,7 @@ class CustomDataGenerator(Sequence):
             
 
 class PublicDataGenerator(Sequence):
-    def __init__(self, images, labels, num_classes, batch_size=8, image_size=255, 
+    def __init__(self, images, labels, num_classes, batch_size=8, image_size=256, 
                  shuffle_epoch=True, mode='train'):
                 
         self.num_classes = num_classes
@@ -241,17 +241,17 @@ def compute_weights(train_generator):
 
 
 def simple_model(num_classes, resolution):
-    entradas = layers.Input((255, 255, 3))
+    entradas = layers.Input((360, 540, 3))
 
     # Two convolutional layers with 16 filters each
-    x = layers.Conv2D(16, (3, 3), activation='relu', padding='same')(entradas)
-    x = layers.Conv2D(16, (3, 3), activation='relu', padding='same')(x)
-    x = layers.Conv2D(16, (3, 3), activation='relu', padding='same')(x)
+    x = layers.Conv2D(128, (3, 3), activation='relu', padding='same')(entradas)
+    x = layers.Conv2D(64, (3, 3), activation='relu', padding='same')(x)
+    x = layers.Conv2D(32, (3, 3), activation='relu', padding='same')(x)
 
     x = layers.GlobalAveragePooling2D()(x)
 
     # Dense layer with 1280 units
-    x = layers.Dense(32, activation='relu')(x)
+    x = layers.Dense(256, activation='relu')(x)
 
     # Output layer
     output_tensor = layers.Dense(num_classes, activation='softmax')(x)
@@ -262,7 +262,7 @@ def simple_model(num_classes, resolution):
     
 def get_model(num_classes, resolution):
     
-    #return simple_model(num_classes, resolution)
+    return simple_model(num_classes, resolution)
     
     base_model = EfficientNetB0(include_top = False, weights='imagenet', pooling='avg')
     # base_model = EfficientNetB0(include_top = False, weights=None, pooling='avg')
@@ -289,7 +289,7 @@ def get_model(num_classes, resolution):
     #     layer.trainable = True
 
     #capa de entradas. 
-    entradas = layers.Input((255, 255, 3))
+    entradas = layers.Input((360, 540, 3))
 
     # Capa de augmentation
     x = data_augmentation(entradas)
@@ -303,11 +303,11 @@ def get_model(num_classes, resolution):
     
     return model1
 
-
+from ZGlobalLib.callbacks import KeyboardInterruptCallback, SimpleLogger
 def train_model(model, train_generator, val_generator, num_classes, class_weights, log_dir):
-    num_epochs = 200
-    patience = 40
-    patience_lr = 20
+    num_epochs = 2000
+    patience = 100
+    patience_lr = 50
     
     init_lr = 1e-4
 
@@ -328,12 +328,12 @@ def train_model(model, train_generator, val_generator, num_classes, class_weight
                  )
 
     callbacks =[
+           SimpleLogger(log_dir, show_model=False),
            EarlyStopping(monitor='val_loss', restore_best_weights=False, patience=patience),
            ReduceLROnPlateau(monitor='val_loss', patience=patience_lr, min_lr=1e-7),       
            ModelCheckpoint(log_dir, monitor=f"val_loss", save_best_only=True, save_weights_only=True),
            TqdmCallback(leave=False),
-           TensorBoard(log_dir=log_dir, histogram_freq=1, profile_batch=0)
-
+           KeyboardInterruptCallback()
     ]
     
     history = model.fit(train_generator, epochs=num_epochs, verbose=0, callbacks=callbacks, validation_data=val_generator,class_weight=class_weights)
