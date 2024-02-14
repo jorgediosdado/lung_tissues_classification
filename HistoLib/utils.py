@@ -13,7 +13,7 @@ def get_files(base_dir, resolution, exclude_pd=False):
     for f in glob.glob(f'{base_dir}/**', recursive=True):
         if not any([f.endswith(e) for e in ext]):
             continue
-        if  f'_{resolution}' not in f:
+        if  (resolution is not None) and f'_{resolution}' not in f:
             continue
         if (exclude_pd) and ('_pd' in f):
             continue
@@ -37,7 +37,7 @@ def get_dataframe(dataset_csv, image_paths):
                 break
     df = df[df['hc']!=0].reset_index(drop=True)
     df = df[df['image_path']!=""].reset_index(drop=True)
-    df = df.sample(frac=1) # Shuffle
+    #df = df.sample(frac=1) # Shuffle
     
     return df
 

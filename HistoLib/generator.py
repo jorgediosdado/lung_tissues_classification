@@ -10,21 +10,22 @@ from tensorflow.keras.utils import Sequence, to_categorical
 class CustomDataGenerator(Sequence):
     def __init__(self, images, labels, num_classes, 
                  batch_size=8, 
-                 image_size=(360,540), 
+                 orig_image_size=(1200,1600), 
+                 scaled = 0.5,
                  shuffle_epoch=True):
         
         self.num_classes = num_classes
         self.images = images
         self.labels = labels
         self.batch_size = batch_size
-        self.image_size = image_size
+        self.image_size = tuple([int(s*scaled) for s in orig_image_size])
         self.shuffle_epoch = shuffle_epoch
         
     def __len__(self):
         return int(np.ceil(len(self.images) / self.batch_size))
     
     def __getitem__(self, idx):
-        
+        random.seed(17)
         if (idx == 0) and (self.shuffle_epoch):            
             # Shuffle at first batch
             c = list(zip(self.images, self.labels))
@@ -48,6 +49,7 @@ class CustomDataGenerator(Sequence):
     
     def preprocess_image(self, image):
         image = tf.image.resize(image, self.image_size).numpy()
+        #image = tf.image.random_crop(image, (*self.image_size, 3)).numpy()
         return image
     
     def show_generator(self, N=6):        
@@ -66,8 +68,8 @@ def get_patient_generators(resolution,
                            batch_size=8,
                            root_directory='data/dataset_w_HC/',
                            dataset_csv = 'data/dataset_HC.csv',
-                           train_split = 0.7,
-                           val_split = 0.15
+                           train_split = 0.6,
+                           val_split = 0.2
                           ):
     # Get all the images, filtering by resolution
     image_paths = get_files(root_directory, resolution=resolution, exclude_pd=exclude_pd)
@@ -90,5 +92,16 @@ def get_patient_generators(resolution,
     train_generator = CustomDataGenerator(df_train['image_path'].values, train_labels, num_classes=len(class_names), batch_size=batch_size)
     val_generator = CustomDataGenerator(df_val['image_path'].values, val_labels, num_classes=len(class_names), shuffle_epoch=False, batch_size=batch_size)
     test_generator = CustomDataGenerator(df_test['image_path'].values, test_labels, num_classes=len(class_names), shuffle_epoch=False, batch_size=batch_size)
+    
+    ##### Debug
+    imw, imh = train_generator.image_size
+    print(f"{f'Images ({imw}x{imh})':<20}  Training: {len(train_labels):<3} | Validation: {len(val_labels):<3} | Test: {len(test_labels):<3} | Total: {len(labels):<3}")
+    print(f"{'Patients':<20}  Training: {len(set(df_train['hc'])):<3} | Validation: {len(set(df_val['hc'])):<3} | Test: {len(set(df_test['hc'])):<3} | Total: {len(set(df['hc'])):<3}")
+    
+    for tclass in set(labels):
+        cs = f'Class {class_names[tclass]:<6} (id {tclass})'
+        tr, tv, te = len(train_labels[train_labels==tclass]), len(val_labels[val_labels==tclass]), len(test_labels[test_labels==tclass])
+        print(f"{cs:<20}  Training: {tr:<3} | Validation: {tv:<3} | Test: {te:<3} | Total: {tr+tv+te:<3}")
+    #####
     
     return train_generator, val_generator, test_generator, class_names

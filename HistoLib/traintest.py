@@ -52,6 +52,7 @@ def train_model(model, train_generator, val_generator, class_weights, log_dir,
     
     history = model.fit(train_generator, epochs=num_epochs, verbose=0, callbacks=callbacks, validation_data=val_generator,class_weight=class_weights)
     
+    print(f'Loading weights with best iteration...')
     model.load_weights(log_dir)
     
     return history
