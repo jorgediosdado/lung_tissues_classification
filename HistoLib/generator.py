@@ -7,8 +7,45 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 from tensorflow.keras.utils import Sequence, to_categorical
 
+
+import cv2
+from albumentations import (
+    Compose, HorizontalFlip, CLAHE, HueSaturationValue,
+    RandomBrightnessContrast, RandomGamma,
+    ToFloat, ShiftScaleRotate, ToGray, Normalize, Resize,
+    RandomCrop
+)
+
+sc = 0.6
+sc2 = 0.25
+AUGMENTATIONS_TRAIN = Compose([
+    HorizontalFlip(p=0.5),
+    RandomCrop(int(1200*sc), int(sc*1600)),
+    RandomGamma(gamma_limit=(80, 120), p=0.5),
+    RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=0.5),
+    HueSaturationValue(hue_shift_limit=5, sat_shift_limit=20,
+                       val_shift_limit=10, p=.9),
+    # CLAHE(p=1.0, clip_limit=2.0),
+    ShiftScaleRotate(
+        shift_limit=0.0625, scale_limit=0.1, 
+        rotate_limit=15, border_mode=cv2.BORDER_REFLECT_101, p=0.8), 
+    ToGray(p=1),
+    # Normalize(),
+    Resize(int(1200*sc2), int(sc2*1600)),
+    ToFloat(max_value=255),
+])
+
+AUGMENTATIONS_TEST = Compose([
+    # CLAHE(p=1.0, clip_limit=2.0),
+    # Normalize(),
+    RandomCrop(int(1200*sc), int(sc*1600)),
+    ToGray(p=1),
+    Resize(int(1200*sc2), int(sc2*1600)),
+    ToFloat(max_value=255),
+])
+
 class CustomDataGenerator(Sequence):
-    def __init__(self, images, labels, num_classes, 
+    def __init__(self, images, labels, num_classes, augmentations,
                  batch_size=8, 
                  orig_image_size=(1200,1600), 
                  scaled = 0.5,
@@ -20,6 +57,7 @@ class CustomDataGenerator(Sequence):
         self.batch_size = batch_size
         self.image_size = tuple([int(s*scaled) for s in orig_image_size])
         self.shuffle_epoch = shuffle_epoch
+        self.augment = augmentations
         
     def __len__(self):
         return int(np.ceil(len(self.images) / self.batch_size))
@@ -40,15 +78,17 @@ class CustomDataGenerator(Sequence):
         
         # Read images
         images = np.array([imageio.v3.imread(im) for im in images])
-        images = images/255
-        
+        # images = images/255
+                
+        images = np.stack([self.augment(image=x)["image"] for x in images], axis=0)
         images = np.array([self.preprocess_image(im) for im in images])
+        
         labels = to_categorical(labels, num_classes=self.num_classes)
 
         return images, labels
     
     def preprocess_image(self, image):
-        image = tf.image.resize(image, self.image_size).numpy()
+        # image = tf.image.resize(image, self.image_size).numpy()
         #image = tf.image.random_crop(image, (*self.image_size, 3)).numpy()
         return image
     
@@ -89,9 +129,9 @@ def get_patient_generators(resolution,
     train_labels, val_labels, test_labels = df_train['targetclass'].values, df_val['targetclass'].values, df_test['targetclass'].values
     
     # Generators
-    train_generator = CustomDataGenerator(df_train['image_path'].values, train_labels, num_classes=len(class_names), batch_size=batch_size)
-    val_generator = CustomDataGenerator(df_val['image_path'].values, val_labels, num_classes=len(class_names), shuffle_epoch=False, batch_size=batch_size)
-    test_generator = CustomDataGenerator(df_test['image_path'].values, test_labels, num_classes=len(class_names), shuffle_epoch=False, batch_size=batch_size)
+    train_generator = CustomDataGenerator(df_train['image_path'].values, train_labels, augmentations=AUGMENTATIONS_TRAIN, num_classes=len(class_names), batch_size=batch_size)
+    val_generator = CustomDataGenerator(df_val['image_path'].values, val_labels, augmentations=AUGMENTATIONS_TEST, num_classes=len(class_names), shuffle_epoch=False, batch_size=batch_size)
+    test_generator = CustomDataGenerator(df_test['image_path'].values, test_labels, augmentations=AUGMENTATIONS_TEST, num_classes=len(class_names), shuffle_epoch=False, batch_size=batch_size)
     
     ##### Debug
     imw, imh = train_generator.image_size
