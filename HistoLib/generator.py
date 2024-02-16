@@ -55,7 +55,7 @@ class CustomDataGenerator(Sequence):
         self.images = images
         self.labels = labels
         self.batch_size = batch_size
-        # self.image_size = tuple([int(s*scaled) for s in orig_image_size])
+        #self.image_size = tuple([int(s*scaled) for s in orig_image_size])
         self.shuffle_epoch = shuffle_epoch
         self.augment = augmentations
         
@@ -134,7 +134,8 @@ def get_patient_generators(resolution,
     test_generator = CustomDataGenerator(df_test['image_path'].values, test_labels, augmentations=AUGMENTATIONS_TEST, num_classes=len(class_names), shuffle_epoch=False, batch_size=batch_size)
     
     ##### Debug
-    imw, imh = train_generator.image_size
+    #imw, imh = train_generator.image_size
+    imw, imh = int(1200*sc2), int(sc2*1600)
     print(f"{f'Images ({imw}x{imh})':<20}  Training: {len(train_labels):<3} | Validation: {len(val_labels):<3} | Test: {len(test_labels):<3} | Total: {len(labels):<3}")
     print(f"{'Patients':<20}  Training: {len(set(df_train['hc'])):<3} | Validation: {len(set(df_val['hc'])):<3} | Test: {len(set(df_test['hc'])):<3} | Total: {len(set(df['hc'])):<3}")
     
