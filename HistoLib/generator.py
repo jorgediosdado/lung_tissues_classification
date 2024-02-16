@@ -7,7 +7,7 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 from tensorflow.keras.utils import Sequence, to_categorical
 
-
+# !pip install albumentations
 import cv2
 from albumentations import (
     Compose, HorizontalFlip, CLAHE, HueSaturationValue,
@@ -16,11 +16,11 @@ from albumentations import (
     RandomCrop
 )
 
-sc = 0.6
+# sc = 0.6
 sc2 = 0.25
 AUGMENTATIONS_TRAIN = Compose([
     HorizontalFlip(p=0.5),
-    RandomCrop(int(1200*sc), int(sc*1600)),
+    # RandomCrop(int(1200*sc), int(sc*1600)),
     RandomGamma(gamma_limit=(80, 120), p=0.5),
     RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=0.5),
     HueSaturationValue(hue_shift_limit=5, sat_shift_limit=20,
@@ -38,7 +38,7 @@ AUGMENTATIONS_TRAIN = Compose([
 AUGMENTATIONS_TEST = Compose([
     # CLAHE(p=1.0, clip_limit=2.0),
     # Normalize(),
-    RandomCrop(int(1200*sc), int(sc*1600)),
+    # RandomCrop(int(1200*sc), int(sc*1600)),
     ToGray(p=1),
     Resize(int(1200*sc2), int(sc2*1600)),
     ToFloat(max_value=255),
@@ -48,14 +48,14 @@ class CustomDataGenerator(Sequence):
     def __init__(self, images, labels, num_classes, augmentations,
                  batch_size=8, 
                  orig_image_size=(1200,1600), 
-                 scaled = 0.5,
+                 # scaled = 0.5,
                  shuffle_epoch=True):
         
         self.num_classes = num_classes
         self.images = images
         self.labels = labels
         self.batch_size = batch_size
-        self.image_size = tuple([int(s*scaled) for s in orig_image_size])
+        # self.image_size = tuple([int(s*scaled) for s in orig_image_size])
         self.shuffle_epoch = shuffle_epoch
         self.augment = augmentations
         
