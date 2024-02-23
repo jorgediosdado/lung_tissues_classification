@@ -3,6 +3,7 @@ from .utils import get_files, get_dataframe, get_classes_labels, train_test_spli
 import random
 import imageio
 import numpy as np
+import pandas as pd
 import tensorflow as tf
 import matplotlib.pyplot as plt
 from tensorflow.keras.utils import Sequence, to_categorical
@@ -16,12 +17,12 @@ from albumentations import (
     RandomCrop, VerticalFlip
 )
 
-#sc = 0.8
+# sc = 0.4
 sc2 = 0.25
 AUGMENTATIONS_TRAIN = Compose([
     HorizontalFlip(p=0.5),
     VerticalFlip(p=0.5),
-    #RandomCrop(int(1200*sc), int(sc*1600)),
+    # RandomCrop(int(1200*sc), int(sc*1600)),
     RandomGamma(gamma_limit=(80, 120), p=0.5),
     RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=0.5),
     HueSaturationValue(hue_shift_limit=5, sat_shift_limit=20,
@@ -39,8 +40,8 @@ AUGMENTATIONS_TRAIN = Compose([
 AUGMENTATIONS_TEST = Compose([
     # CLAHE(p=1.0, clip_limit=2.0),
     # Normalize(),
-    #RandomCrop(int(1200*sc), int(sc*1600)),
-    # ToGray(p=1),
+    # RandomCrop(int(1200*sc), int(sc*1600)),
+    #ToGray(p=1),
     Resize(int(1200*sc2), int(sc2*1600)),
     ToFloat(max_value=255),
 ])
@@ -60,11 +61,13 @@ class CustomDataGenerator(Sequence):
         self.shuffle_epoch = shuffle_epoch
         self.augment = augmentations
         
+        random.seed(17)
+        
     def __len__(self):
         return int(np.ceil(len(self.images) / self.batch_size))
     
     def __getitem__(self, idx):
-        random.seed(17)
+        
         if (idx == 0) and (self.shuffle_epoch):            
             # Shuffle at first batch
             c = list(zip(self.images, self.labels))
@@ -102,6 +105,39 @@ class CustomDataGenerator(Sequence):
             axs[i].axis('off')
             axs[i].set_title(f'Class: {np.argmax(g0[1][i])}')
 
+        
+def dataset_description(root_directory='data/dataset_w_HC/', 
+                        dataset_csv = 'data/dataset_HC.csv', hc=None):
+    image_paths = get_files(root_directory, resolution=None, exclude_pd=False)
+    df = get_dataframe(dataset_csv, image_paths, filter_missing=False)
+    class_names, labels = get_classes_labels(root_directory, df['image_path'].values, class_type='micro', exclude_pd=False)
+    
+    df['targetclass'] = labels
+    
+    if hc is not None:
+        if hc:
+            df = df[df.hc!=0]
+        else:
+            df = df[df.hc==0]
+    
+    aa = df.groupby('targetclass')
+    #display(df)
+    
+    aa = aa.agg(
+        #patients=pd.NamedAgg(column="hc", aggfunc=pd.Series.nunique),
+        Ix20=pd.NamedAgg(column="resolution", aggfunc=lambda x: x.str.contains('20x').sum()),
+        Ix40=pd.NamedAgg(column="resolution", aggfunc=lambda x: x.str.contains('40x').sum()),
+        images=pd.NamedAgg(column="targetclass", aggfunc='count'),
+    )
+    #aa['patients'] = aa['patients']-1
+    
+    # aa = aa.reset_index(drop=True)
+    # aa['targetname'] = class_names
+    # aa = aa.set_index('targetname')
+    aa.loc['sum'] = aa.sum(0)
+    return df, aa
+    
+    # return df
 
 def get_patient_generators(resolution, 
                            class_type, 
@@ -109,8 +145,9 @@ def get_patient_generators(resolution,
                            batch_size=8,
                            root_directory='data/dataset_w_HC/',
                            dataset_csv = 'data/dataset_HC.csv',
-                           train_split = 0.6,
-                           val_split = 0.2
+                           train_split = 0.8,
+                           val_split = 0.1,
+                           random_state = 7
                           ):
     # Get all the images, filtering by resolution
     image_paths = get_files(root_directory, resolution=resolution, exclude_pd=exclude_pd)
@@ -123,8 +160,8 @@ def get_patient_generators(resolution,
     df['targetclass'] = labels
     
     # Create stratified splits without overlaping pacientes
-    df_train, df_test = train_test_split(df, test_size = 1-train_split)
-    df_test, df_val = train_test_split(df_test, test_size = round((val_split)/(1-train_split), 3))
+    df_train, df_test = train_test_split(df, test_size = 1-train_split, random_state=random_state)
+    df_test, df_val = train_test_split(df_test, test_size = round((val_split)/(1-train_split), 3), random_state=random_state)
     
     # Labels
     train_labels, val_labels, test_labels = df_train['targetclass'].values, df_val['targetclass'].values, df_test['targetclass'].values

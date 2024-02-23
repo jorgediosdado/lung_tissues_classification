@@ -22,7 +22,7 @@ def get_files(base_dir, resolution, exclude_pd=False):
     return ret_files
 
 
-def get_dataframe(dataset_csv, image_paths):
+def get_dataframe(dataset_csv, image_paths, filter_missing=True):
     df = pd.read_csv(dataset_csv)
     df['image_path'] = ""
     used = set()
@@ -35,8 +35,9 @@ def get_dataframe(dataset_csv, image_paths):
                     assert False, 'Error with the dataset'
                 used.add(idim)
                 break
-    df = df[df['hc']!=0].reset_index(drop=True)
-    df = df[df['image_path']!=""].reset_index(drop=True)
+    if filter_missing:
+        df = df[df['hc']!=0].reset_index(drop=True)
+        df = df[df['image_path']!=""].reset_index(drop=True)
     #df = df.sample(frac=1) # Shuffle
     
     return df
@@ -56,7 +57,7 @@ def get_classes_labels(root_directory, image_paths, class_type, exclude_pd=False
     return class_names, labels
 
 
-def train_test_split(df, test_size=0.5):
+def train_test_split(df, test_size=0.5, random_state=7):
     groups = df.groupby('targetclass')
     all_train = []
     all_test = []
@@ -65,7 +66,7 @@ def train_test_split(df, test_size=0.5):
         if group.shape[0] == 0:
             continue
         train_inds, test_inds = next(GroupShuffleSplit(
-            test_size=test_size, n_splits=2, random_state=7).split(group, groups=group['hc']))
+            test_size=test_size, n_splits=2, random_state=random_state).split(group, groups=group['hc']))
 
         all_train += group.iloc[train_inds]['hc'].tolist()
         all_test += group.iloc[test_inds]['hc'].tolist()

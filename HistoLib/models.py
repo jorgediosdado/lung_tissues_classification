@@ -87,9 +87,10 @@ def resnet_model(num_classes, input_shape):
 
     x = base_model(entradas)
     # Add a dense layer
-    x = layers.Dense(256, activation='relu')(x)
+    x = layers.Dense(256, activation='relu', name='prev_dense')(x)
     # Add another dense layer
-    salidas = layers.Dense(num_classes, activation='softmax')(x)
+    x = layers.Dropout(0.5, name='dpout')(x)
+    salidas = layers.Dense(num_classes, activation='softmax', name='last_dense')(x)
     model1 = Model(inputs = entradas, outputs = salidas)
     
     return model1, 'ResNet50V2'

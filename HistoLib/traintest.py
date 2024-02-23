@@ -7,7 +7,7 @@ import tensorflow as tf
 import tensorflow_addons as tfa
 import matplotlib.pyplot as plt
 from tqdm.keras import TqdmCallback
-from sklearn.metrics import ConfusionMatrixDisplay, precision_score, recall_score, accuracy_score
+from sklearn.metrics import ConfusionMatrixDisplay, precision_score, recall_score, accuracy_score, roc_auc_score
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau, TensorBoard
 
 def get_logdir(model_name, run_name='', base_log='logs'):
@@ -38,8 +38,8 @@ def compile_model(model, num_classes, init_lr=1e-4):
 
 def train_model(model, train_generator, val_generator, class_weights, log_dir, 
                 num_epochs = 2000, 
-                patience = 100,
-                patience_lr = 50):
+                patience = 25,
+                patience_lr = 10):
 
     callbacks =[
            SimpleLogger(log_dir, show_model=False),
@@ -83,16 +83,19 @@ def plot_metrics(history):
 def test_model(model, test_generator, class_names):
 
     test_predictions = model.predict(test_generator)
-    test_labels = np.concatenate([np.argmax(t[1], 1) for t in test_generator])
+    ys = [t[1] for t in test_generator]
+    test_labels = np.concatenate([np.argmax(t, 1) for t in ys])
 
     # Convert predictions to class labels
     predicted_labels = np.argmax(test_predictions, axis=1)
     
     # Calculate metrics
+    auc = roc_auc_score(np.concatenate(ys), test_predictions, average='macro', multi_class='ovo')
     accuracy = accuracy_score(test_labels, predicted_labels)
     precision = precision_score(test_labels, predicted_labels, average='macro')
     recall = recall_score(test_labels, predicted_labels, average='macro')
 
+    print("Test AUC:", auc)
     print("Test Accuracy:", accuracy)
     print("Test Precision:", precision)
     print("Test Recall:", recall)
@@ -101,9 +104,12 @@ def test_model(model, test_generator, class_names):
     labels = np.unique(np.concatenate((test_labels, predicted_labels)))
 
     # Visualize the confusion matrix
-    fig = plt.figure(figsize=(5,5))
-    ax = fig.gca()
-    ConfusionMatrixDisplay.from_predictions(test_labels, predicted_labels, display_labels=class_names, normalize='true', ax=ax)
+    fig, axs = plt.subplots(1,2,figsize=(12,5))
     
-    ax.set_title(f'Acc: {accuracy:4.2f}')
+    ConfusionMatrixDisplay.from_predictions(test_labels, predicted_labels, display_labels=class_names, normalize='true', ax=axs[0])
+    axs[0].set_title(f'Acc: {accuracy:4.2f}')
+    
+    ConfusionMatrixDisplay.from_predictions(test_labels, predicted_labels, display_labels=class_names, normalize=None, ax=axs[1])
+    axs[1].set_title(f'Acc: {accuracy:4.2f}')
+    
     plt.show()
