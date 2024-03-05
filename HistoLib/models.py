@@ -49,7 +49,6 @@ def simple_model2(num_classes, input_shape):
 
 def vit_model(num_classes, input_shape):
     inp = layers.Input(input_shape)
-    # res = layers.Resizing(512, 512)(inp)
     
     m1 = from_pretrained_keras("ErnestBeckham/ViT-Lungs")
     
@@ -65,33 +64,28 @@ def vit_model(num_classes, input_shape):
 
 def efficientnet_model(num_classes, input_shape):
     base_model = EfficientNetB0(include_top = False, weights='imagenet', pooling='avg')
-
-    #capa de entradas. 
-    entradas = layers.Input(input_shape)
-
-    x = base_model(entradas)
+    inputs = layers.Input(input_shape)
+    x = base_model(inputs)
     # Add a dense layer
     x = layers.Dense(256, activation='relu')(x)
     # Add another dense layer
     salidas = layers.Dense(num_classes, activation='softmax')(x)
-    model1 = Model(inputs = entradas, outputs = salidas)
+    model1 = Model(inputs = inputs, outputs = salidas)
     
     return model1, 'EfficientNetB0'
 
 
 def resnet_model(num_classes, input_shape):
-    base_model = ResNet50V2(include_top = False, weights='imagenet', pooling='avg')
+    inputs = layers.Input(input_shape)
+    
+    base_model = ResNet50V2(include_top = False, weights='imagenet', pooling='avg', input_tensor=inputs)
 
-    #capa de entradas. 
-    entradas = layers.Input(input_shape)
-
-    x = base_model(entradas)
     # Add a dense layer
-    x = layers.Dense(256, activation='relu', name='prev_dense')(x)
+    x = layers.Dense(256, activation='relu', name='prev_dense')(base_model.output)
     # Add another dense layer
     x = layers.Dropout(0.5, name='dpout')(x)
     salidas = layers.Dense(num_classes, activation='softmax', name='last_dense')(x)
-    model1 = Model(inputs = entradas, outputs = salidas)
+    model1 = Model(inputs = inputs, outputs = salidas)
     
     return model1, 'ResNet50V2'
         

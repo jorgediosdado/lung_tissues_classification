@@ -22,6 +22,7 @@ def compile_model(model, num_classes, init_lr=1e-4):
                   loss='categorical_crossentropy', 
                   metrics=[
                         tf.keras.metrics.CategoricalAccuracy(name=f'metrics/accuracy'),
+                        tf.keras.metrics.TopKCategoricalAccuracy(2, name=f'metrics/top-2-accuracy'),
                         tf.keras.metrics.TopKCategoricalAccuracy(3, name=f'metrics/top-3-accuracy'),
                         tfa.metrics.F1Score(num_classes=num_classes, average='macro', name='metrics/F1-macro'),
                         tf.keras.metrics.AUC(multi_label=True, num_labels=num_classes, name='metrics/AUC'),
@@ -80,7 +81,7 @@ def plot_metrics(history):
     plt.show()
     
     
-def test_model(model, test_generator, class_names):
+def test_model(model, test_generator, class_names, conf_normalize=True):
 
     test_predictions = model.predict(test_generator)
     ys = [t[1] for t in test_generator]
@@ -95,21 +96,18 @@ def test_model(model, test_generator, class_names):
     precision = precision_score(test_labels, predicted_labels, average='macro')
     recall = recall_score(test_labels, predicted_labels, average='macro')
 
-    print("Test AUC:", auc)
-    print("Test Accuracy:", accuracy)
-    print("Test Precision:", precision)
-    print("Test Recall:", recall)
+    print(f"Test AUC: {auc:.2f}")
+    print(f"Test Accuracy: {accuracy:.2f}")
+    print(f"Test Precision: {precision:.2f}")
+    print(f"Test Recall: {recall:.2f}")
 
     # Ensure that labels are unique and match the confusion matrix
     labels = np.unique(np.concatenate((test_labels, predicted_labels)))
 
     # Visualize the confusion matrix
-    fig, axs = plt.subplots(1,2,figsize=(12,5))
+    fig, ax = plt.subplots(figsize=(12,5))
     
-    ConfusionMatrixDisplay.from_predictions(test_labels, predicted_labels, display_labels=class_names, normalize='true', ax=axs[0])
-    axs[0].set_title(f'Acc: {accuracy:4.2f}')
-    
-    ConfusionMatrixDisplay.from_predictions(test_labels, predicted_labels, display_labels=class_names, normalize=None, ax=axs[1])
-    axs[1].set_title(f'Acc: {accuracy:4.2f}')
+    ConfusionMatrixDisplay.from_predictions(test_labels, predicted_labels, display_labels=class_names, normalize='true' if conf_normalize else None, ax=ax)
+    ax.set_title(f'Acc: {accuracy:4.2f}')
     
     plt.show()

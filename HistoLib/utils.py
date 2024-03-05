@@ -21,27 +21,20 @@ def get_files(base_dir, resolution, exclude_pd=False):
         
     return ret_files
 
-
-def get_dataframe(dataset_csv, image_paths, filter_missing=True):
-    df = pd.read_csv(dataset_csv)
-    df['image_path'] = ""
-    used = set()
-    for idx, row in df.iterrows():
-        for idim, im in enumerate(image_paths):
-            if (row['superclass'] in im) and ((pd.isnull(row['subclass'])) or (row['subclass'] in im)) and (row['resolution'] in im) and ('_'+row['image_id']+'.jpg' in im):
-                df.loc[idx, 'image_path'] = im    
-                if idim in used:                
-                    print(idx, row, idim, im)
-                    assert False, 'Error with the dataset'
-                used.add(idim)
-                break
-    if filter_missing:
-        df = df[df['hc']!=0].reset_index(drop=True)
-        df = df[df['image_path']!=""].reset_index(drop=True)
-    #df = df.sample(frac=1) # Shuffle
+def get_dataframe(dataset_csv, resolution=None, exclude_pd=False):
+    da = pd.read_csv(dataset_csv)
+    da['image_path'] = ''
+    for idx, row in da.iterrows():
+        css = row['superclass']
+        css = css if pd.isnull(row['subclass']) else css+'_'+row['subclass']
+        pth = css + '_' + row['resolution'] + '_' + row['image_id']
+        da.loc[idx, 'image_path'] = f'data/dataset_w_HC/{css}/' + pth+'.jpg'
     
-    return df
-
+    if resolution is not None:
+        da = da[da.resolution==resolution]
+    if exclude_pd:
+        da = da[da.subclass != 'pd']
+    return da
 
 def get_classes_labels(root_directory, image_paths, class_type, exclude_pd=False):
     if class_type == 'micro':
@@ -89,3 +82,38 @@ def compute_weights(my_generator):
 def plot_model(model):
     return tf_plot(model, rankdir='LR', show_shapes=True)
     
+    
+def dataset_description(dataset_csv='data/dataset_HC.csv'):
+    df = get_dataframe(dataset_csv=dataset_csv)
+    table = []
+    for sp, scs in [('aca', ('bd', 'md', 'pd')), 
+                    ('nor', None),
+                    ('scc', ('bd', 'md', 'pd')),
+                   ]:
+        if scs is not None:
+            for sc in scs:
+                tmp = []
+                for filt in [True, False, None]:
+                    dfc = df[df.hc==0] if filt==False else df[df.hc!=0] if filt==True else df.copy()
+                    for res in ['20x', '40x']:
+                        cnt = len(dfc[(dfc.superclass==sp) & (dfc.subclass==sc) & (dfc.resolution==res)])
+                        tmp.append(cnt)
+                table.append(tmp)
+        else:
+            tmp = []
+            for filt in [True, False, None]:
+                dfc = df[df.hc==0] if filt==False else df[df.hc!=0] if filt==True else df.copy()
+                for res in ['20x', '40x']:
+                    cnt = len(dfc[(dfc.superclass==sp) & (dfc.resolution==res)])
+                    tmp.append(cnt)
+            table.append(tmp)
+    summary = pd.DataFrame(table, 
+             columns=['20x_ID', '40x_ID', '20x_noID', '40x_noID', '20x', '40x'],
+            index=['aca_bd', 'aca_md', 'aca_pd', 'nor', 'scc_bd', 'scc_md', 'scc_pd']
+            )
+    summary.loc['Total'] = summary.sum()
+    
+    print('Total images', summary.iloc[-1,-2:].sum())
+    print('Total patients', len(df[df.hc!=0].hc.unique()))
+    
+    return summary
