@@ -23,6 +23,7 @@ def get_files(base_dir, resolution, exclude_pd=False):
 
 def get_dataframe(dataset_csv, resolution=None, exclude_pd=False):
     da = pd.read_csv(dataset_csv)
+    da = da[da.hc != 0]
     da['image_path'] = ''
     for idx, row in da.iterrows():
         css = row['superclass']
@@ -93,27 +94,26 @@ def dataset_description(dataset_csv='data/dataset_HC.csv'):
         if scs is not None:
             for sc in scs:
                 tmp = []
-                for filt in [True, False, None]:
-                    dfc = df[df.hc==0] if filt==False else df[df.hc!=0] if filt==True else df.copy()
-                    for res in ['20x', '40x']:
-                        cnt = len(dfc[(dfc.superclass==sp) & (dfc.subclass==sc) & (dfc.resolution==res)])
-                        tmp.append(cnt)
+                dfc = df.copy()
+                for res in ['20x', '40x']:
+                    cnt = len(dfc[(dfc.superclass==sp) & (dfc.subclass==sc) & (dfc.resolution==res)])
+                    tmp.append(cnt)
                 table.append(tmp)
         else:
             tmp = []
-            for filt in [True, False, None]:
-                dfc = df[df.hc==0] if filt==False else df[df.hc!=0] if filt==True else df.copy()
-                for res in ['20x', '40x']:
-                    cnt = len(dfc[(dfc.superclass==sp) & (dfc.resolution==res)])
-                    tmp.append(cnt)
+            dfc = df.copy()
+            for res in ['20x', '40x']:
+                cnt = len(dfc[(dfc.superclass==sp) & (dfc.resolution==res)])
+                tmp.append(cnt)
             table.append(tmp)
     summary = pd.DataFrame(table, 
-             columns=['20x_ID', '40x_ID', '20x_noID', '40x_noID', '20x', '40x'],
+             columns=['20x', '40x'],
             index=['aca_bd', 'aca_md', 'aca_pd', 'nor', 'scc_bd', 'scc_md', 'scc_pd']
             )
     summary.loc['Total'] = summary.sum()
+    summary.loc[:, 'Total'] = summary.sum(1)
     
-    print('Total images', summary.iloc[-1,-2:].sum())
-    print('Total patients', len(df[df.hc!=0].hc.unique()))
+    print('Total images', summary.iloc[-1,-1])
+    print('Total patients', len(df.hc.unique()))
     
     return summary
