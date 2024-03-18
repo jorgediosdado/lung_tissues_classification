@@ -2,6 +2,7 @@ from tensorflow import keras
 import matplotlib.pyplot as plt
 import tensorflow as tf
 import numpy as np
+import matplotlib as mpl
 from tensorflow.keras.models import Model
 import cv2
 
@@ -50,33 +51,45 @@ def get_img_array(img_path, size):
     return array
         
         
-def merge_image_mask(im, mk, alpha=0.3, channel='blue', mask_thresh=0.5):
+def merge_image_mask(im, mk, alpha=0.3, colormap='jet', mask_thresh=0.5):
     """
     Given an image and a mask of the same size, it blends the images together.
     """
     
-    color2int = dict(zip(['red', 'green', 'blue'], range(3)))    
-    assert channel in color2int
+    mk = np.clip(mk, 0, 1)
 
-    orig = im.copy()
-    orig[mk>=mask_thresh]=0
+    heatmap = np.uint8(255 * mk)
+    jet = mpl.colormaps[colormap]
 
-    other = im.copy()
-    other[mk<mask_thresh]=0
+    jet_colors = jet(np.arange(256))[:, :3]
+    jet_heatmap = jet_colors[heatmap]
 
-    mask_rgb = np.zeros_like(im)
-    mask_rgb[:,:,color2int[channel]] = 1
-    merge_image = ((1 - alpha) * other + alpha * mask_rgb)
-    merge_image[mk<mask_thresh]=0
-    
-    merge_image += orig
+    merge_image = jet_heatmap * alpha + im * (1-alpha)
+    merge_image[mk<mask_thresh] = im[mk<mask_thresh]
     
     return merge_image
         
+    
+def get_gradcam_samples(model, generator, 
+                        mask_thresh=0.25, layer='conv5_block3_3_conv'):
+    x,y,z = generator[0][0][0].shape
+    imsize = x,y
+    
+    images, heats = [], []
+    for im in generator.images:
+        im = get_img_array(im, imsize)
+        heat = make_gradcam_heatmap(im, model, layer)
+        heat = cv2.resize(heat, dsize=(y, x))
+        merge = merge_image_mask(im[0], heat, mask_thresh=mask_thresh)
+        
+        images.append(im)
+        heats.append(merge)
+    return images, heats
+    
         
 def generate_gradcam_samples(model, generator, N=8, 
                              mask_thresh=0.25, layer='conv5_block3_3_conv'):
-    fig, axs = plt.subplots(3,N, figsize=(30,9))
+    fig, axs = plt.subplots(3,N, figsize=(25,8))
     used = set()   
     for i in range(N):    
         idx = np.random.randint(0, len(generator.images))
@@ -88,14 +101,14 @@ def generate_gradcam_samples(model, generator, N=8,
         im = get_img_array(generator.images[idx], imsize)
         axs[0,i].imshow(im[0]);
         axs[0,i].axis('off')
-        # axs[0,i].set_title(generator.images[idx])
+        axs[0,i].set_title(f"Real: {generator.images[idx].split('/')[2]} {generator.labels[idx]}", fontsize=18)
         heat = make_gradcam_heatmap(im, model, layer)
         pos_i, pos_j = imsize
         heat = cv2.resize(heat, dsize=(pos_j, pos_i))
         axs[1,i].imshow(heat)
         axs[1,i].axis('off')
-        # axs[1,i].set_title(np.argmax(model.predict(im)[0]))
-        axs[2,i].imshow(merge_image_mask(im[0], heat, channel='green', mask_thresh=mask_thresh))
+        axs[1,i].set_title(f"Pred: {np.argmax(model.predict(im)[0])}", fontsize=18)
+        axs[2,i].imshow(merge_image_mask(im[0], heat, mask_thresh=mask_thresh))
         axs[2,i].axis('off')
 
 

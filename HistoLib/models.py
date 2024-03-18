@@ -94,7 +94,7 @@ def get_model(generator, model_name='ResNet50'):
     assert model_name in ['VIT', 'Simple', 'Simple2', 'Eff0', 'ResNet50']
     
     num_classes = generator.num_classes
-    input_shape = (*generator.image_size, 3)
+    input_shape = generator[0][0][0].shape
     if model_name == 'VIT':
         return vit_model(num_classes, input_shape)
     if model_name == 'Simple':
